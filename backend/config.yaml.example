@@ -1,0 +1,19 @@
+# 数据库配置示例文件
+# 复制此文件为 config.yaml 并填写真实信息
+database:
+  host: "your-mysql-host"
+  port: 3306
+  user: "your-database-user"
+  password: "your-database-password"
+  dbname: "skin_performance"
+  charset: "utf8mb4"
+
+# 服务器配置
+server:
+  port: 8080
+  mode: "release"  # debug 或 release
+
+# JWT配置
+jwt:
+  secret: "your-secret-key-change-this"
+  expire_hours: 24

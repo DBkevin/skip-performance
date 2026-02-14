@@ -45,3 +45,5 @@ Thumbs.db
 # Test coverage
 coverage.out
 coverage.html
+# Config files with secrets
+backend/config.yaml

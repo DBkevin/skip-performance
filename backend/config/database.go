@@ -1,6 +1,8 @@
 package config
 
 import (
+	"log"
+
 	"skin-performance/models"
 
 	"gorm.io/driver/mysql"
@@ -10,11 +12,17 @@ import (
 
 var DB *gorm.DB
 
-func InitDB() (*gorm.DB, error) {
-	dsn := "claw:thisopenclaw@tcp(120.25.70.117:3306)/skin_performance?charset=utf8mb4&parseTime=True&loc=Local"
+// InitDBWithConfig 使用配置初始化数据库
+func InitDBWithConfig(cfg *Config) (*gorm.DB, error) {
+	dsn := cfg.Database.GetDSN()
+
+	logLevel := logger.Silent
+	if cfg.Server.Mode == "debug" {
+		logLevel = logger.Info
+	}
 
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.Default.LogMode(logLevel),
 	})
 	if err != nil {
 		return nil, err
@@ -24,16 +32,33 @@ func InitDB() (*gorm.DB, error) {
 	return db, nil
 }
 
+// InitDB 保持向后兼容
+func InitDB() (*gorm.DB, error) {
+	if AppConfig == nil {
+		// 尝试加载默认配置
+		cfg, err := LoadConfig("")
+		if err != nil {
+			return nil, err
+		}
+		return InitDBWithConfig(cfg)
+	}
+	return InitDBWithConfig(AppConfig)
+}
+
 func AutoMigrate(db *gorm.DB) error {
+	// 禁用外键约束检查
+	db.Exec("SET FOREIGN_KEY_CHECKS = 0")
+	defer db.Exec("SET FOREIGN_KEY_CHECKS = 1")
+
 	return db.AutoMigrate(
 		&models.Customer{},
 		&models.Project{},
 		&models.Employee{},
+		&models.User{},
 		&models.Visit{},
 		&models.VisitItem{},
 		&models.RevisitRecord{},
 		&models.ProductConsumption{},
-		&models.User{},
 	)
 }
 
