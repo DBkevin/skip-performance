@@ -10,9 +10,17 @@ import (
 
 func main() {
 	// 初始化数据库
-	if _, err := config.InitDB(); err != nil {
+	db, err := config.InitDB()
+	if err != nil {
 		log.Fatalf("数据库连接失败: %v", err)
 	}
+
+	// 自动迁移数据库表
+	log.Println("开始数据库迁移...")
+	if err := config.AutoMigrate(db); err != nil {
+		log.Fatalf("数据库迁移失败: %v", err)
+	}
+	log.Println("数据库迁移完成")
 
 	// 设置 gin 模式
 	gin.SetMode(gin.DebugMode)

@@ -1,6 +1,8 @@
 package config
 
 import (
+	"skin-performance/models"
+
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -10,7 +12,7 @@ var DB *gorm.DB
 
 func InitDB() (*gorm.DB, error) {
 	dsn := "claw:thisopenclaw@tcp(120.25.70.117:3306)/skin_performance?charset=utf8mb4&parseTime=True&loc=Local"
-	
+
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
 	})
@@ -20,6 +22,19 @@ func InitDB() (*gorm.DB, error) {
 
 	DB = db
 	return db, nil
+}
+
+func AutoMigrate(db *gorm.DB) error {
+	return db.AutoMigrate(
+		&models.Customer{},
+		&models.Project{},
+		&models.Employee{},
+		&models.Visit{},
+		&models.VisitItem{},
+		&models.RevisitRecord{},
+		&models.ProductConsumption{},
+		&models.User{},
+	)
 }
 
 func GetDB() *gorm.DB {
