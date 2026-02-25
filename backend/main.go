@@ -1,48 +1,71 @@
 package main
 
 import (
-	"flag"
-	"fmt"
 	"log"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"skin-performance/config"
 	"skin-performance/routes"
+	"skin-performance/utils"
+	"skin-performance/models"
 )
 
-func main() {
-	// 命令行参数
-	configPath := flag.String("config", "config.yaml", "配置文件路径")
-	flag.Parse()
+func ptr(s string) *string {
+	return &s
+}
 
+func main() {
 	// 加载配置
-	log.Println("正在加载配置...")
-	cfg, err := config.LoadConfig(*configPath)
-	if err != nil {
-		log.Fatalf("加载配置失败: %v", err)
-	}
-	log.Println("配置加载成功")
+	config.LoadConfig()
+
+	// 设置 gin 模式
+	gin.SetMode(config.AppConfig.GinMode)
 
 	// 初始化数据库
-	log.Println("开始数据库迁移...")
-	db, err := config.InitDBWithConfig(cfg)
+	db, err := config.InitDB()
 	if err != nil {
 		log.Fatalf("数据库连接失败: %v", err)
 	}
 
+	// 自动迁移数据库表
+	log.Println("开始数据库迁移...")
 	if err := config.AutoMigrate(db); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
 	log.Println("数据库迁移完成")
 
-	// 种子数据（初始化默认数据）
-	SeedData()
-
-	// 设置 gin 模式
-	if cfg.Server.Mode == "release" {
-		gin.SetMode(gin.ReleaseMode)
-	} else {
-		gin.SetMode(gin.DebugMode)
+	// 初始化管理员用户（如果不存在）
+	db = config.GetDB()
+	var existingUser models.User
+	if err := db.Where("username = ?", "admin").First(&existingUser).Error; err != nil {
+		// 创建管理员员工记录
+		employee := models.Employee{
+			Name:     "系统管理员",
+			Role:     models.RoleAdmin,
+			Phone:    ptr("13800138000"),
+			JobNumber: ptr("ADMIN001"),
+			IsActive: true,
+		}
+		if err := db.Create(&employee).Error; err == nil {
+			// 加密密码
+			hashedPassword, err := utils.HashPassword("admin123")
+			if err == nil {
+				// 创建管理员用户
+				user := models.User{
+					Username:   "admin",
+					Password:   hashedPassword,
+					EmployeeID: &employee.ID,
+					Role:       "admin",
+					IsActive:   true,
+				}
+				if err := db.Create(&user).Error; err == nil {
+					log.Println("✅ 初始管理员用户创建成功")
+					log.Println("用户名: admin")
+					log.Println("密码: admin123")
+				}
+			}
+		}
 	}
 
 	// 创建路由
@@ -50,9 +73,24 @@ func main() {
 
 	// CORS 中间件
 	r.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		origin := c.Request.Header.Get("Origin")
+		allowedOrigins := strings.Split(config.AppConfig.CORSAllowOrigins, ",")
+		
+		// 检查是否允许该来源
+		allowed := false
+		for _, allowedOrigin := range allowedOrigins {
+			if strings.TrimSpace(allowedOrigin) == origin || strings.TrimSpace(allowedOrigin) == "*" {
+				allowed = true
+				break
+			}
+		}
+		
+		if allowed {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			c.Writer.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
@@ -65,12 +103,9 @@ func main() {
 	routes.SetupRoutes(r)
 
 	// 启动服务器
-	port := cfg.Server.Port
-	if port == 0 {
-		port = 8080
-	}
-	log.Printf("服务器启动在 :%d", port)
-	if err := r.Run(fmt.Sprintf(":%d", port)); err != nil {
+	port := config.AppConfig.ServerPort
+	log.Printf("服务器启动在 :%s", port)
+	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("服务器启动失败: %v", err)
 	}
 }
